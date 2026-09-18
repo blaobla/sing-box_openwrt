@@ -1,0 +1,88 @@
+name: Build sing-box for OpenWrt
+
+on:
+  schedule:
+    - cron: '0 3 * * *'    # 每周一凌晨 3 点（省配额）
+  workflow_dispatch:    #手动
+  push:
+    paths:
+      - '.github/workflows/my-openwrt-build.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Find latest v1.14 tag
+        id: find_tag
+        run: |
+          TAG=$(git ls-remote --tags --refs https://github.com/SagerNet/sing-box.git \
+            | awk -F/ '{print $NF}' \
+            | grep -E '^v1\.14\.[0-9]+$' \
+            | sort -V \
+            | tail -n1)
+          if [ -z "$TAG" ]; then
+            echo "没有找到 v1.14 的 tag"
+            exit 1
+          fi
+          VERSION="${TAG#v}"
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Found: $TAG (version $VERSION)"
+
+      - name: Checkout sing-box
+        uses: actions/checkout@v4
+        with:
+          repository: SagerNet/sing-box
+          ref: ${{ steps.find_tag.outputs.tag }}
+          fetch-depth: 1
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+
+      - name: Set build tags
+        run: |
+          echo "BUILD_TAGS=with_gvisor,with_quic,with_utls,badlinkname,tfogo_checklinkname0" >> $GITHUB_ENV
+          echo "LDFLAGS_SHARED=$(cat release/LDFLAGS)" >> $GITHUB_ENV
+
+      - name: Build
+        env:
+          CGO_ENABLED: "0"
+          GOOS: linux
+          GOARCH: arm64
+        run: |
+          mkdir -p dist
+          go build -v -trimpath -o dist/sing-box \
+            -tags "${BUILD_TAGS}" \
+            -ldflags "-X 'github.com/sagernet/sing-box/constant.Version=${{ steps.find_tag.outputs.version }}' ${LDFLAGS_SHARED} -s -w -buildid=" \
+            ./cmd/sing-box
+
+      - name: Install apk-tools
+        run: |
+          docker run --rm -v /usr/local/bin:/mnt alpine:edge \
+            sh -c "apk add --no-cache apk-tools-static && cp /sbin/apk.static /mnt/apk && chmod +x /mnt/apk"
+
+      - name: Build OpenWrt APK
+        run: |
+          .github/build_openwrt_apk.sh \
+            "aarch64_cortex-a53" \
+            "${{ steps.find_tag.outputs.version }}" \
+            "dist/sing-box" \
+            "dist/sing-box_${{ steps.find_tag.outputs.version }}_openwrt_aarch64_cortex-a53.apk"
+
+      - name: Archive binary
+        run: |
+          cd dist
+          DIR_NAME="sing-box-${{ steps.find_tag.outputs.tag }}-linux-arm64"
+          mkdir -p "${DIR_NAME}"
+          cp ../LICENSE "${DIR_NAME}"
+          cp sing-box "${DIR_NAME}"
+          tar -czvf "${DIR_NAME}.tar.gz" "${DIR_NAME}"
+          rm -r "${DIR_NAME}"
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: sing-box-openwrt-arm64
+          path: dist
