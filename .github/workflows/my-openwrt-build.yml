@@ -43,7 +43,7 @@ jobs:
 
       - name: Set build tags
         run: |
-          echo "BUILD_TAGS=with_gvisor,with_quic,with_utls,badlinkname,tfogo_checklinkname0" >> $GITHUB_ENV
+          echo "BUILD_TAGS=with_gvisor,with_quic,with_utls" >> $GITHUB_ENV
           echo "LDFLAGS_SHARED=$(cat release/LDFLAGS)" >> $GITHUB_ENV
 
       - name: Build
