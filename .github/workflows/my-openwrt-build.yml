@@ -30,7 +30,7 @@ jobs:
           echo "Found: $TAG (version $VERSION)"
 
       - name: Checkout sing-box
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: SagerNet/sing-box
           ref: ${{ steps.find_tag.outputs.tag }}
@@ -82,7 +82,7 @@ jobs:
           rm -r "${DIR_NAME}"
 
       - name: Upload
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: sing-box-openwrt-arm64
           path: dist
