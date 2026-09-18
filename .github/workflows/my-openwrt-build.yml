@@ -2,32 +2,44 @@ name: Build sing-box for OpenWrt
 
 on:
   schedule:
-    - cron: '0 3 * * *'    # 每周一凌晨 3 点（省配额）
-  workflow_dispatch:    #手动
+    - cron: '0 3 * * *'    # 每天 03:00 UTC
+  workflow_dispatch:       # 手动
   push:
     paths:
       - '.github/workflows/my-openwrt-build.yml'
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - name: Find latest v1.14 tag
         id: find_tag
+        shell: bash
         run: |
+          set -euo pipefail
+
           TAG=$(git ls-remote --tags --refs https://github.com/SagerNet/sing-box.git \
             | awk -F/ '{print $NF}' \
             | grep -E '^v1\.14\.[0-9]+$' \
             | sort -V \
             | tail -n1)
+
           if [ -z "$TAG" ]; then
-            echo "没有找到 v1.14 的 tag"
+            echo "没有找到 v1.14.x tag"
             exit 1
           fi
+
           VERSION="${TAG#v}"
-          echo "tag=$TAG" >> $GITHUB_OUTPUT
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "Found: $TAG (version $VERSION)"
+
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+          echo "Found: $TAG"
+          echo "Version: $VERSION"
 
       - name: Checkout sing-box
         uses: actions/checkout@v5
@@ -43,8 +55,10 @@ jobs:
 
       - name: Set build tags
         run: |
-          echo "BUILD_TAGS=with_gvisor,with_quic,with_utls" >> $GITHUB_ENV
-          echo "LDFLAGS_SHARED=$(cat release/LDFLAGS)" >> $GITHUB_ENV
+          set -euo pipefail
+
+          echo "BUILD_TAGS=with_gvisor,with_quic,with_utls,badlinkname,tfogo_checklinkname0" >> "$GITHUB_ENV"
+          echo "LDFLAGS_SHARED=$(cat release/LDFLAGS)" >> "$GITHUB_ENV"
 
       - name: Build
         env:
@@ -52,19 +66,34 @@ jobs:
           GOOS: linux
           GOARCH: arm64
         run: |
+          set -euo pipefail
+
           mkdir -p dist
-          go build -v -trimpath -o dist/sing-box \
+
+          go build -v \
+            -trimpath \
+            -o dist/sing-box \
             -tags "${BUILD_TAGS}" \
             -ldflags "-X 'github.com/sagernet/sing-box/constant.Version=${{ steps.find_tag.outputs.version }}' ${LDFLAGS_SHARED} -s -w -buildid=" \
             ./cmd/sing-box
 
       - name: Install apk-tools
         run: |
-          docker run --rm -v /usr/local/bin:/mnt alpine:edge \
-            sh -c "apk add --no-cache apk-tools-static && cp /sbin/apk.static /mnt/apk && chmod +x /mnt/apk"
+          set -euo pipefail
+
+          docker run --rm \
+            -v /usr/local/bin:/mnt \
+            alpine:edge \
+            sh -c "apk add --no-cache apk-tools-static && \
+                   cp /sbin/apk.static /mnt/apk && \
+                   chmod +x /mnt/apk"
 
       - name: Build OpenWrt APK
         run: |
+          set -euo pipefail
+
+          chmod +x .github/build_openwrt_apk.sh
+
           .github/build_openwrt_apk.sh \
             "aarch64_cortex-a53" \
             "${{ steps.find_tag.outputs.version }}" \
@@ -73,16 +102,50 @@ jobs:
 
       - name: Archive binary
         run: |
-          cd dist
-          DIR_NAME="sing-box-${{ steps.find_tag.outputs.tag }}-linux-arm64"
-          mkdir -p "${DIR_NAME}"
-          cp ../LICENSE "${DIR_NAME}"
-          cp sing-box "${DIR_NAME}"
-          tar -czvf "${DIR_NAME}.tar.gz" "${DIR_NAME}"
-          rm -r "${DIR_NAME}"
+          set -euo pipefail
 
-      - name: Upload
-        uses: actions/upload-artifact@v5
+          cd dist
+
+          DIR_NAME="sing-box-${{ steps.find_tag.outputs.tag }}-linux-arm64"
+
+          mkdir -p "${DIR_NAME}"
+
+          cp ../LICENSE "${DIR_NAME}/"
+          cp sing-box "${DIR_NAME}/"
+
+          tar -czvf "${DIR_NAME}.tar.gz" "${DIR_NAME}"
+
+          rm -rf "${DIR_NAME}"
+
+      - name: Show release files
+        run: |
+          echo "准备上传以下文件："
+          ls -lh dist/
+
+      - name: Upload to Release
+        uses: softprops/action-gh-release@v2
         with:
-          name: sing-box-openwrt-arm64
-          path: dist
+          tag_name: ${{ steps.find_tag.outputs.tag }}
+          name: sing-box ${{ steps.find_tag.outputs.tag }} OpenWrt arm64
+          body: |
+            自动构建的 sing-box ${{ steps.find_tag.outputs.tag }} for OpenWrt aarch64_cortex-a53。
+
+            ### 文件
+
+            - APK: `sing-box_${{ steps.find_tag.outputs.version }}_openwrt_aarch64_cortex-a53.apk`
+            - 二进制: `sing-box-${{ steps.find_tag.outputs.tag }}-linux-arm64.tar.gz`
+
+            ### Target
+
+            `aarch64_cortex-a53`
+
+            ### Architecture
+
+            `linux/arm64`
+
+          files: |
+            dist/*.apk
+            dist/*.tar.gz
+
+          draft: false
+          prerelease: false
