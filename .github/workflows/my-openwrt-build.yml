@@ -57,7 +57,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          echo "BUILD_TAGS=with_quic,with_utls,badlinkname,tfogo_checklinkname0" >> "$GITHUB_ENV"
+          echo "BUILD_TAGS=with_gvisor,with_quic,with_utls,badlinkname,tfogo_checklinkname0" >> "$GITHUB_ENV"
           echo "LDFLAGS_SHARED=$(cat release/LDFLAGS)" >> "$GITHUB_ENV"
 
       - name: Build
@@ -121,6 +121,14 @@ jobs:
         run: |
           echo "准备上传以下文件："
           ls -lh dist/
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: sing-box-openwrt-arm64
+          path: |
+            dist/*.apk
+            dist/*.tar.gz
 
       - name: Upload to Release
         uses: softprops/action-gh-release@v2
