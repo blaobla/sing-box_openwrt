@@ -82,12 +82,6 @@ jobs:
           df -hT
           echo "=============================================================================="
 
-      - name: Fix Subversion package issue
-        run: |
-          sudo apt-get remove --purge -y subversion
-          sudo apt-get update
-          sudo apt-get install -y subversion
-
       - name: 下载编译所需的依赖 (Install the software packages required for compilation)
         run: |
           # 1️⃣ 将临时目录指向 Runner 主磁盘，避开 /tmp tmpfs 限制
@@ -124,6 +118,7 @@ jobs:
           path: openWRT
 
       - name: 复制当前仓库的配置文件到 openWRT 仓库  (Copy current repo config to openWRT repo)
+        if: ${{inputs.ssh == false}}
         run: cp -f .config diy.sh openWRT/
 
       - name: 如果选择了上传 files 大法，则复制 files 目录到 openWRT 仓库 (If you choose to upload the etc files, copy the etc directory to the openWRT repo)
@@ -131,6 +126,7 @@ jobs:
         run: cp -r files openWRT/files
 
       - name: 运行 diy.sh (Run diy.sh)
+        if: ${{inputs.ssh == false}}
         working-directory: openWRT
         run: |
           chmod +x diy.sh
