@@ -82,6 +82,12 @@ jobs:
           df -hT
           echo "=============================================================================="
 
+      - name: Fix Subversion package issue
+        run: |
+          sudo apt-get remove --purge -y subversion
+          sudo apt-get update
+          sudo apt-get install -y subversion
+
       - name: 下载编译所需的依赖 (Install the software packages required for compilation)
         run: |
           # 1️⃣ 将临时目录指向 Runner 主磁盘，避开 /tmp tmpfs 限制
