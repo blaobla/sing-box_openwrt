@@ -1,12 +1,12 @@
 name: Build sing-box for OpenWrt
 
 on:
-  schedule:
-    - cron: '0 3 * * *'    # 每天 03:00 UTC
+  # schedule:
+    # - cron: '0 3 * * *'    # 每天 03:00 UTC
   workflow_dispatch:       # 手动
-  push:
-    paths:
-      - '.github/workflows/my-openwrt-build.yml'
+  # push:
+    # paths:
+      # - '.github/workflows/my-openwrt-build.yml'
 
 permissions:
   contents: write
